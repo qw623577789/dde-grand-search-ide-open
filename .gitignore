@@ -1,0 +1,58 @@
+# 构建目录
+build/
+cmake-build-*/
+
+# CMake 生成文件（防 in-source 构建污染）
+CMakeCache.txt
+CMakeFiles/
+cmake_install.cmake
+CTestTestfile.cmake
+compile_commands.json
+Makefile
+*.ninja
+.ninja_*
+
+# 编译产物
+*.o
+*.obj
+*.a
+*.so
+*.so.*
+*.dylib
+*.exe
+*.dll
+moc_*.cpp
+qrc_*.cpp
+ui_*.h
+
+# Qt
+.qmake.stash
+*.pro.user*
+*.qbs.user
+
+# IDE
+.idea/
+.vscode/
+*.kdev4
+*.kate-swp
+*.swp
+
+# Debian 打包产物
+deb/
+obj-*/
+
+# debhelper 构建状态（debian/ 内生成）
+debian/files
+debian/debhelper-build-stamp
+debian/.debhelper/
+debian/*.debhelper.log
+debian/*.substvars
+debian/dde-grand-search-ideproject/
+
+# 工具本地状态
+.claude/
+.cache/
+
+# 系统
+.DS_Store
+*~

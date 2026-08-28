@@ -1,0 +1,6 @@
+dde-grand-search-ideproject (1.0.0) unstable; urgency=medium
+
+  * Initial release: searcher plugin for dde-grand-search that finds and
+    opens recent projects of VS Code family and JetBrains family IDEs
+
+ -- Deepin Packages Builder <packages@deepin.com>  Thu, 28 Aug 2026 10:00:00 +0800

@@ -1,0 +1,28 @@
+Source: dde-grand-search-ideproject
+Section: utils
+Priority: optional
+Maintainer: Deepin Packages Builder <packages@deepin.com>
+Build-Depends:
+ cmake,
+ debhelper-compat (= 13),
+ qt6-base-dev,
+ qt6-tools-dev,
+ qt6-l10n-tools
+Standards-Version: 4.6.2
+Homepage: https://www.deepin.org/
+
+Package: dde-grand-search-ideproject
+Architecture: any
+Depends:
+ ${misc:Depends},
+ ${shlibs:Depends},
+ dde-grand-search (>= 6.0.0)
+Description: DDE Grand Search plugin - find and open recent IDE projects
+ Searcher plugin for dde-grand-search that finds recent projects of
+ installed IDEs (VS Code family, JetBrains family) and opens them with
+ the corresponding IDE.
+ .
+ The plugin registers as org.deepin.grandsearch.ideproject and is
+ activated automatically by the search daemon. After installation,
+ restart the search daemon (killall dde-grand-search-daemon) or
+ re-login for the plugin to take effect.

@@ -1,0 +1,9 @@
+[Grand Search]
+Name=org.deepin.grandsearch.ideproject
+Mode=Auto
+Priority=1
+DBusService=org.deepin.grandsearch.ideproject
+DBusAddress=/org/deepin/grandsearch/ideproject
+DBusInterface=org.deepin.grandsearch.ideproject.SearchPlugin
+InterfaceVersion=1.0
+Exec=@IDE_PROJECT_PLUGIN_EXEC@
