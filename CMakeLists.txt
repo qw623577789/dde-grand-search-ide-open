@@ -5,7 +5,7 @@
 cmake_minimum_required(VERSION 3.16)
 
 project(ide-project-search-plugin
-    VERSION 1.0
+    VERSION 1.0.1
     DESCRIPTION "DDE Grand Search plugin for finding and opening IDE recent projects"
     LANGUAGES CXX)
 
@@ -56,6 +56,57 @@ add_dependencies(${PROJECT_NAME} ${PROJECT_NAME}_lrelease)
 
 # 更新翻译文件：cmake --build build --target ${PROJECT_NAME}_lupdate
 qt_add_lupdate(${PROJECT_NAME} TS_FILES ${TS_FILES} SOURCES ${SOURCES})
+
+# 单元测试：ctest 运行（dpkg 打包时 dh_auto_test 同样会执行）
+include(CTest)
+if(BUILD_TESTING)
+    find_package(Qt6 QUIET COMPONENTS Test)
+    if(Qt6Test_FOUND)
+        add_executable(tst_desktopfile
+            tests/tst_desktopfile.cpp
+            src/sources/desktopfile.cpp
+        )
+        target_include_directories(tst_desktopfile PRIVATE
+            ${CMAKE_CURRENT_SOURCE_DIR}/src
+            ${CMAKE_CURRENT_SOURCE_DIR}/src/sources
+        )
+        target_link_libraries(tst_desktopfile PRIVATE Qt6::Core Qt6::Test)
+        add_test(NAME tst_desktopfile COMMAND tst_desktopfile)
+
+        # 核心搜索流程：mock 数据源驱动 IdeProjectSearch（协议/匹配/作用域/
+        # 快捷配置/去重/排序/分组/打开），HOME 重定向隔离快捷配置文件
+        add_executable(tst_search
+            tests/tst_search.cpp
+            src/ideprojectsearch.cpp
+            src/sources/desktopfile.cpp
+            src/sources/jetbrainsprojectsource.cpp
+            src/sources/vscodeprojectsource.cpp
+        )
+        target_include_directories(tst_search PRIVATE
+            ${CMAKE_CURRENT_SOURCE_DIR}/src
+            ${CMAKE_CURRENT_SOURCE_DIR}/src/sources
+        )
+        target_link_libraries(tst_search PRIVATE Qt6::Core Qt6::Gui Qt6::Sql Qt6::Test)
+        add_test(NAME tst_search COMMAND tst_search)
+
+        # 数据源解析：HOME 重定向构造 VS Code storage.json / state.vscdb 与
+        # JetBrains recentProjects.xml 夹具，覆盖解析优先级/过滤/排序/版本选择
+        add_executable(tst_datasources
+            tests/tst_datasources.cpp
+            src/sources/desktopfile.cpp
+            src/sources/jetbrainsprojectsource.cpp
+            src/sources/vscodeprojectsource.cpp
+        )
+        target_include_directories(tst_datasources PRIVATE
+            ${CMAKE_CURRENT_SOURCE_DIR}/src
+            ${CMAKE_CURRENT_SOURCE_DIR}/src/sources
+        )
+        target_link_libraries(tst_datasources PRIVATE Qt6::Core Qt6::Gui Qt6::Sql Qt6::Test)
+        add_test(NAME tst_datasources COMMAND tst_datasources)
+    else()
+        message(WARNING "Qt6 Test 组件未找到，跳过单元测试构建")
+    endif()
+endif()
 
 include(GNUInstallDirs)
 

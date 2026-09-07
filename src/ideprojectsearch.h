@@ -26,7 +26,7 @@ public slots:
     bool action(const QString &json);
 
 private:
-    QString buildResultJson(const QString &mID, const QList<ProjectItem> &items) const;
+    QString buildResultJson(const QString &mID, const QList<ProjectItem> &items);
     QString buildEmptyResult(const QString &mID) const;
     bool matches(const QString &keyword, const ProjectItem &item) const;
     QList<ProjectItem> collectProjects() const;

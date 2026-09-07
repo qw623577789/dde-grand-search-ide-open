@@ -89,18 +89,19 @@ QString IdeProjectSearch::search(const QString &json)
         return buildEmptyResult(mID);
 
     QList<ProjectItem> matched;
-    QSet<QString> seenPaths;
+    // 同一路径可能被多个 IDE 记录：按来源各保留一条（分组与打开行为不同，
+    // 点击分别用对应 IDE 打开），仅同一来源内的重复路径保留首次出现
+    QHash<QString, QSet<QString>> seenBySource;
     const QList<ProjectItem> all = collectProjects();
     for (const ProjectItem &item : all) {
         if (!scopeId.isEmpty() && item.source != scopeId)
             continue;
         if (!keyword.isEmpty() && !matches(keyword, item))
             continue;
-        // 同一路径可能被多个 IDE 记录：指定作用域时只在该 IDE 内部去重（作用域列表
-        // 应完整反映对应 IDE 的历史），全局搜索时跨源去重只保留首次出现
-        if (seenPaths.contains(item.path))
+        QSet<QString> &seen = seenBySource[item.source];
+        if (seen.contains(item.path))
             continue;
-        seenPaths.insert(item.path);
+        seen.insert(item.path);
         matched.append(item);
     }
 
@@ -147,18 +148,23 @@ bool IdeProjectSearch::action(const QString &json)
     if (action != "openitem" || itemId.isEmpty())
         return false;
 
-    // UI 会原样回传 item 字段；剥掉 buildResultJson 加的排序序号前缀（无前缀时原样保留）
-    if (itemId.size() > 4 && itemId.at(3) == QLatin1Char('|')
-        && itemId.at(0).isDigit() && itemId.at(1).isDigit() && itemId.at(2).isDigit()) {
-        itemId = itemId.mid(4);
+    // UI 会原样回传 item 字段；优先按带序号前缀的完整 item 精确匹配——同一路径
+    // 可能被多个 IDE 记录，须打开对应 IDE 的那条；未命中再剥前缀按裸路径回退
+    ProjectItem item = m_itemMap.value(itemId);
+    QString bareId = itemId;
+    if (item.path.isEmpty()) {
+        if (bareId.size() > 4 && bareId.at(3) == QLatin1Char('|')
+            && bareId.at(0).isDigit() && bareId.at(1).isDigit() && bareId.at(2).isDigit()) {
+            bareId = bareId.mid(4);
+        }
+        item = m_itemMap.value(bareId);
     }
 
-    ProjectItem item = m_itemMap.value(itemId);
     if (item.path.isEmpty()) {
         // 进程重启等场景下 item 不在缓存中，尝试重新扫描定位
         const QList<ProjectItem> all = collectProjects();
         for (const ProjectItem &candidate : all) {
-            if (candidate.id == itemId) {
+            if (candidate.id == bareId) {
                 item = candidate;
                 break;
             }
@@ -180,7 +186,7 @@ bool IdeProjectSearch::action(const QString &json)
     return QDesktopServices::openUrl(QUrl::fromLocalFile(item.path));
 }
 
-QString IdeProjectSearch::buildResultJson(const QString &mID, const QList<ProjectItem> &items) const
+QString IdeProjectSearch::buildResultJson(const QString &mID, const QList<ProjectItem> &items)
 {
     QJsonObject root;
     root["ver"] = kProtocolVersion;
@@ -210,7 +216,11 @@ QString IdeProjectSearch::buildResultJson(const QString &mID, const QList<Projec
         // dde-grand-search UI 对无权重条目按 item 字符串排序（compareByWeight 兜底），
         // 会破坏插件给出的 MRU 顺序；加等宽序号前缀使 UI 的字符串序等于我们的排序。
         // 打开时 action() 会剥掉该前缀
-        jsonItem["item"] = QStringLiteral("%1|%2").arg(rank++, 3, 10, QLatin1Char('0')).arg(item.id);
+        const QString prefixedId =
+            QStringLiteral("%1|%2").arg(rank++, 3, 10, QLatin1Char('0')).arg(item.id);
+        jsonItem["item"] = prefixedId;
+        // 同路径条目（不同 IDE）各有唯一前缀，Action 按前缀定位到对应 IDE 的记录
+        m_itemMap.insert(prefixedId, item);
         jsonItem["name"] = item.name;
         jsonItem["icon"] = item.icon;
         jsonItem["type"] = "ide/recent-project";

@@ -21,6 +21,10 @@ DDE 全局搜索（dde-grand-search）搜索插件：查找并打开本机 IDE�
 ├── ide-project-search.conf.in     # 插件注册配置模板
 ├── script/                        # install.sh / uninstall.sh / build-deb.sh
 ├── debian/                        # Debian 打包配置（control/rules/changelog/...）
+├── tests/
+│   ├── tst_desktopfile.cpp        # desktop 解析与信任校验单元测试
+│   ├── tst_search.cpp             # 核心搜索流程测试（mock 数据源驱动）
+│   └── tst_datasources.cpp        # VS Code / JetBrains 数据源解析测试
 ├── translations/
 │   └── ide-project-search-plugin_zh_CN.ts # 组名等界面字符串翻译
 └── src/
@@ -41,9 +45,9 @@ DDE 全局搜索（dde-grand-search）搜索插件：查找并打开本机 IDE�
 |-----|----------|
 | VS Code 系列 | 历史列表（`history.recentlyOpenedPathsList`）：1.118+ 在 `~/.vscode-shared/sharedStorage/state.vscdb`，旧版本在 `~/.config/<应用>/User/globalStorage/state.vscdb`；均读不到时回退 `storage.json` 的 Open Recent 菜单/老版 `openedPathsList`；另以 `User/workspaceStorage/*/workspace.json` 补齐 |
 | JetBrains 系列 | `~/.config/JetBrains/<产品><版本>/options/recentProjects.xml`（Rider 另含 `recentSolutions.xml`），Android Studio 在 `~/.config/Google/AndroidStudio<版本>/`；同款产品只读最新版本目录（升级时历史打开记录自动迁移），最新版本无记录时才回退更旧版本 |
-| 打开方式 | VS Code 系优先用 PATH 命令（code/cursor/...）；JetBrains 系优先匹配 desktop 文件 Exec，其次 JetBrains Toolbox `~/.local/share/JetBrains/Toolbox/apps/`；最后回退文件管理器 |
+| 打开方式 | VS Code 系优先用 PATH 命令（code/cursor/...）；JetBrains 系优先匹配 desktop 文件 Exec，其次 JetBrains Toolbox `~/.local/share/JetBrains/Toolbox/apps/`；最后回退文件管理器。desktop 文件与 Exec 程序须通过来源与路径校验：仅信任当前用户或系统（root 且用户不可写）属主的文件，程序须为绝对路径且存在、可执行；文件名按组件边界匹配已知 IDE（`code` 不误中 `codeblocks`、`idea` 不误中 `ideal`） |
 
-搜索匹配：项目名不区分大小写子串匹配；关键词 ≥3 字符时同时匹配完整路径（父目录名等）。作用域搜索（如 `jh`）只在该 IDE 内部去重，列表完整反映该 IDE 的历史；不带作用域的全局搜索跨 IDE 去重、同一路径只保留首次出现。项目名统一附加完整路径显示（如 `demo (/project/java/demo)`）。
+搜索匹配：项目名不区分大小写子串匹配；关键词 ≥3 字符时同时匹配完整路径（父目录名等）。同一路径被多个 IDE 记录时按来源各保留一条——作用域搜索只列出对应 IDE 的历史，全局搜索同时展示各 IDE 的记录（分组与打开行为不同，点击分别用对应 IDE 打开），仅同一来源内的重复路径保留首次出现。项目名统一附加完整路径显示（如 `demo (/project/java/demo)`）。
 
 结果排序：按最近打开时间排序——VS Code 历史列表取所在 `state.vscdb` 的修改时间、工作区取 `workspaceStorage/*/state.vscdb` 的修改时间，JetBrains 取 `recentProjects.xml` 各条目的 `projectOpenTimestamp`（缺失时回退文件修改时间；XML 的 entry 顺序是插入序、不可当作最近使用序）；同一配置来源内保持 IDE 自身的最近使用（MRU）顺序。数量上限：每个 VS Code 变体历史最多 20 条、工作区补齐最多 40 条；JetBrains 每产品最多 20 条；最终结果整体截断 100 条。
 
@@ -108,6 +112,31 @@ sudo cmake --install build
 killall dde-grand-search-daemon
 ```
 
+## 单元测试
+
+三个 Qt Test 测试套件覆盖核心逻辑，测试把 `HOME` 重定向到临时目录（每个用例
+独立子目录），与真实用户配置完全隔离：
+
+- **tst_desktopfile**：desktop 文件定位与 Exec 解析的信任校验（组件边界匹配、
+  来源信任、程序路径校验、locate/parseExec 集成）
+- **tst_search**：核心搜索流程，用 mock 数据源驱动 `IdeProjectSearch`——协议
+  校验、名称/路径匹配规则、作用域前缀与快捷命令配置（含每次搜索重新读取）、
+  去重语义、排序与 100 条截断、分组聚合与序号前缀、`Action` 打开
+- **tst_datasources**：数据源解析，构造 VS Code storage.json（新版菜单 /
+  老版 openedPathsList）/ state.vscdb（优先级、损坏与缺失回退、工作区补齐）
+  与 JetBrains recentProjects.xml（additionalInfo 时间戳排序、`$USER_HOME$`
+  展开、失效路径过滤、老格式、版本目录选择、Android Studio）夹具；涉及
+  SQLite 的用例在缺少 QSQLITE 驱动时自动跳过
+
+```bash
+cmake -B build
+cmake --build build
+ctest --test-dir build --output-on-failure
+```
+
+`dpkg-buildpackage` 打包时也会自动运行测试（dh_auto_test）；不需要测试时可
+`cmake -B build -DBUILD_TESTING=OFF`。
+
 ## Debian 打包
 
 debian/ 目录已提供打包配置（debhelper 13、Qt6、按 multiarch 安装到
@@ -122,6 +151,18 @@ sudo apt install dpkg-dev debhelper cmake qt6-base-dev qt6-tools-dev qt6-l10n-to
 
 包名 `dde-grand-search-ideproject`，依赖 `dde-grand-search (>= 6.0.0)`；如需改名，
 同步修改 `debian/control` 的 Source/Package 与 `debian/changelog` 首行。
+
+版本与产物校验约定（`script/build-deb.sh` 自动执行，不满足即中止）：
+
+- **版本同步**：`CMakeLists.txt` 的 `project(... VERSION x.y.z)` 与
+  `debian/changelog` 首行版本必须一致（deb 文件名由 changelog 决定）；
+- **deb 内附 changelog**：变更记录由 dh_installchangelogs 自动装入
+  `/usr/share/doc/dde-grand-search-ideproject/changelog.gz`，构建后校验其存在；
+- **sha256 校验和**：构建完成后生成 `deb/SHA256SUMS`，下载/分发 deb 时校验：
+
+  ```bash
+  cd deb && sha256sum -c SHA256SUMS
+  ```
 
 ## 调试
 
@@ -188,8 +229,11 @@ searcher 无法置顶。
 - [x] VS Code / Insiders / OSS / VSCodium / Cursor 历史项目（menubar 数据 + openedPathsList + workspaceStorage）
 - [x] JetBrains 系列历史项目（recentProjects.xml / recentSolutions.xml，含社区版 IdeaIC 与 Android Studio）
 - [x] 打开动作：PATH 命令、desktop 文件 Exec、JetBrains Toolbox、文件管理器回退
+- [x] desktop Exec 信任边界收紧：来源与路径校验（当前用户/系统属主、绝对路径可执行）
 - [x] 组名与项目名国际化
-- [x] Debian 打包
+- [x] Debian 打包（含版本同步检查、changelog 附包、sha256 校验和）
+- [x] desktop 解析单元测试（Qt Test，构建与打包时运行）
+- [x] 基础功能测试：核心搜索流程（mock 数据源）与数据源解析（临时 HOME 夹具）
 - [ ] 主体支持 weight/免重排后移除 item 序号前缀（见「主体依赖需求」第 1 条）
 - [ ] 主体支持分组置顶后移除相关 workaround（见「主体依赖需求」第 2 条）
 
